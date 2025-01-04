@@ -1,8 +1,11 @@
 
 import functions_framework
+from google.cloud import storage
+from flask import Response
+import json
 
+stg_client = storage.Client()
 
-from markupsafe import escape
 
 @functions_framework.http
 def hello_http(request):
@@ -16,12 +19,39 @@ def hello_http(request):
         <https://flask.palletsprojects.com/en/1.1.x/api/#flask.make_response>.
     """
     request_json = request.get_json(silent=True)
-    request_args = request.args
+    print(request_json)
 
-    if request_json and "name" in request_json:
-        name = request_json["name"]
-    elif request_args and "name" in request_args:
-        name = request_args["name"]
-    else:
-        name = "World"
-    return f"Hello {escape(name)}!"
+    def event_stream():
+        # contador = 0
+        # while True:
+        # contador += 1
+
+        data = {"choices":
+                [
+                    {
+                        "index": 0,
+                        "delta": {
+                            "role": "assistant",
+                            "content": f"{request_json}"}
+                    }
+                ]
+                }
+        yield f"data: {json.dumps(data)}\n\n"  # Formato SSE
+
+    return Response(event_stream(), mimetype="text/event-stream")
+
+
+@functions_framework.http
+def callback_gh(request):
+    """
+    Callback for GitHub. 
+
+    Args:
+        request (request): The request object.
+    """
+    bucket = stg_client.get_bucket('figa-dev')
+    request_json = request.get_json(silent=True)
+    blob = bucket.blob('data.json')
+    blob.upload_from_string(json.dumps(request_json))
+
+    return f"Callback received! {request_json}"
